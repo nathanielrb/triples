@@ -1,7 +1,12 @@
 (use s-sparql s-sparql-parser
      srfi-1 persistent-hash-map matchable)
 
-(load "fmicroKanren.scm")
+(define (assp pred alist)
+  (find (lambda (pair) (pred (car pair))) alist))
+
+(include "fmicroKanren/fmicroKanren.scm")
+(include "fmicroKanren/miniKanren-wrappers.scm")
+
 
 (define-syntax project
   (syntax-rules ()
@@ -147,3 +152,5 @@
 	       (<S> <P> <M>)
 	       (<U> <V> <M>)
 	       (<Q> <R> <M>)))
+
+(print (promised r))
