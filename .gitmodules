@@ -1,0 +1,3 @@
+[submodule "fmicroKanren"]
+	path = fmicroKanren
+	url = https://github.com/nathanielrb/fmicroKanren.git
