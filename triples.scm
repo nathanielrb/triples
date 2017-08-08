@@ -24,7 +24,7 @@
 ;;   -indexes: [ T_0 => <index -s  [<S> => (<P1> <P2> ...)  ]
 ;;                            -sp [(<S> <P1>) => (O11 O12 ...)  ]
 ;;                            -p -po -o -os -spo>
-;;               T_1 => ... ] >
+;;               T_1 => <index> ] >
 (define-record db time indexes)
 
 (define-record index s sp p po o os spo)
