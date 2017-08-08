@@ -71,14 +71,6 @@
                    (map-update-in oi `(,o) consr s)
                    (map-update-in osi `(,(symbol-append o s)) consr p)
                    (map-add spoi (symbol-append s p o) val))))))))
-                   ;; (map-update-in si `(,s) consr p)
-                   ;; (map-update-in spi `((,s ,p)) consr o)
-                   ;; (map-update-in pi `(,p) consr  o)
-                   ;; (map-update-in poi `((,p ,o)) consr s)
-                   ;; (map-update-in oi `(,o) consr s)
-                   ;; (map-update-in osi `((,o ,s)) consr p)
-                   ;; (map-add spoi `(,s ,p ,o) val))))))))
-
 
 (define add-triples (cut update-triples <> #t))
 
@@ -90,62 +82,51 @@
 (define (delete-triple s p o)
   (delete-triples `((,s ,p ,o))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; db-kanren interface
-(define (tripleo s p o)
-  (let ((U (lambda (table keys var)
-	     (let ((vals (map-ref (table (latest (*DB*))) keys)))
-	       (let stream ((reference '())
-			    (next-ref vals)
-			    (os vals))
-		 (if (equal? os reference)
+(define (triple-nol s p o minus)
+  (let ((I (lambda (table key)
+                   (lambda (db)
+                     (map-ref (table db) key))))
+        (T (lambda (indexes var)
+	     (let ((vals (indexes (latest (*DB*)))))
+	       (let stream ((ref '()) (next-ref vals) (os vals))
+		 (if (equal? os ref)
 		     (later
-		      (let ((vals (map-ref (table (latest (*DB*))) keys)))
-			(stream next-ref vals vals)))
+		      (let ((vals (indexes (latest (*DB*)))))
+                        (stream next-ref vals vals)))
 		     (disj
 		      (conj (== var (car os))
-			    (project (s p o)
-				     (tripleo s p o)))
-		      (stream reference next-ref (cdr os)))))))))
-    (cond ((and (var? s) (var? p) (var? o)) 5)
-	  ((and (var? s) (var? p)) (U dbs-o o s))
-	  ((and (var? s) (var? o)) (U dbs-p p o))
-	  ((and (var? p) (var? o)) (U dbs-s s p))
-	  ((var? s) (U dbs-po (symbol-append p o) s))
-	  ((var? p) (U dbs-os (symbol-append o s) p))
-	  ((var? o) (U dbs-sp (symbol-append s p) o))
-	  (else (let ((val (lambda ()
-			     (map-ref (dbs-spo (latest (*DB*))) (symbol-append s p o)))))
-		  (disj 
-		   (== (val) #t)
-		   (later (== (val) #f))))))))
-;;			(later (== (val) #t))))))))
-		    
-;;(disj
-;;		   (== val #t)  )))))
-		;	(delay
-		;	  (==  (map-ref (dbs-spo (latest (*DB*))) (list s p o)) #t))))))))
+			    (project (s p o) (triple-nol s p o minus)))
+		      (stream ref next-ref (cdr os)))))))))
+    (cond ((and (var? s) (var? p) (var? o)) (T (compose map-keys dbs-s) s))
+	  ((and (var? s) (var? p))          (T (I dbs-o o) s))
+	  ((and (var? s) (var? o))          (T (I dbs-p p) o))
+	  ((and (var? p) (var? o))          (T (I dbs-s s) p))
+	  ((var? s)                         (T (I dbs-po (symbol-append p o)) s))
+	  ((var? p)                         (T (I dbs-os (symbol-append o s)) p))
+	  ((var? o)                         (T (I dbs-sp (symbol-append s p)) o))
+	  (else
+           (let ((val (lambda () (map-ref (dbs-spo (latest (*DB*))) (symbol-append s p o))))
+                 (sign (lambda (v) (if v '+ '-))))
+                (let singleton ((ref #f))
+                  (let ((v (val)))
+                    (cond ((and v ref) (later (singleton v)))
+                          (v (disj (== #t #t) (later (singleton v))))
+                          (else (disj (== minus '-) (later (singleton v))))))))))))
 
 (add-triples '((<S> <P> <O>)
 	       (<U> <V> <O>)
 	       (<S> <P> <O2>)
 	       (<Q> <R> <O>)))
 
-;; (define r  ((tripleo '<S> '<P> #(0)) empty-state))
-;; (define f (drop r 2))
-;; (add-triples '((<S> <P> <OOO>)))
+(define r (run* (q)
+           (fresh (o minus) 
+             (== q `(,minus ,o))
+             (conj+ (triple-nol '<Q> '<R> o minus)
+                    (triple-nol '<S> '<P> o minus)
+                    (triple-nol '<U> '<V> o minus)))))
 
-(define r ((conj (tripleo '<Q> '<R> #(0))
-		 (conj (tripleo '<S> '<P> #(0))
-		       (tripleo '<U> '<V> #(0)))
-		 
-		 )
-                 empty-state))
+(print r)
 
-(define r2 ((conj+ (tripleo '<Q> '<R> #(0))
-		   (tripleo '<S> '<P> #(0))
-		   (tripleo '<U> '<V> #(0)))
-                 empty-state))
 (add-triples '((<S> <P> <O3>)
 	       (<Q> <R> <O3>)
 	       (<U> <V> <O3>)
@@ -153,4 +134,8 @@
 	       (<U> <V> <M>)
 	       (<Q> <R> <M>)))
 
-(print (promised r))
+(print (future r))
+
+(delete-triples '((<S> <P> <O>)))
+
+(print (future (future r)))
