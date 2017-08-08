@@ -1,3 +1,5 @@
+;; still a big mess, don't look closely
+
 (use s-sparql s-sparql-parser)
 
 (include "triples.scm")
@@ -57,6 +59,7 @@
            (results (current $))
            (cont (promised $)))
       (values
+       ;; integrate this with reify...
        (map (lambda (state)
               (cons (if (equal? (alist-ref #(-1) state) '-) '- '+)
               (map (lambda (var)
