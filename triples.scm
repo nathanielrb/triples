@@ -18,13 +18,13 @@
 ;; Database
 ;; tied together with lists, persistent hash maps, and shoestring
 ;;
-;; basic structure, []'s are persistent hash maps and <>'s are records
+;; basic structure with [key => val] for persistent hash maps and <name -slot: val> for records:
 ;; <database
-;;   -time: (t0 t1 t2 ...)
-;;   -indexes: [ t0 => <index -s  [<S> => (<P1> <P2> ...)  ]
+;;   -time: (T_n T_(n-1) ... T_0)
+;;   -indexes: [ T_0 => <index -s  [<S> => (<P1> <P2> ...)  ]
 ;;                            -sp [(<S> <P1>) => (O11 O12 ...)  ]
-;;                             ...>
-;;                t1 => ... ] >
+;;                            -p -po -o -os -spo>
+;;               T_1 => ... ] >
 (define-record db time indexes)
 
 (define-record index s sp p po o os spo)
