@@ -91,7 +91,7 @@
 (define (delete-triple s p o)
   (delete-triples `((,s ,p ,o))))
 
-(define (triple-nol s p o minus)
+(define (triple-nol delta s p o)
   (let ((index-getter (lambda (table key)
                         (lambda () (map-ref (table (latest-db)) key))))
         (T (lambda (index var)
@@ -103,7 +103,7 @@
                         (stream vals next-ref vals)))
 		     (disj
 		      (conj (== var (car os))
-			    (project (s p o) (triple-nol s p o minus)))
+			    (project (s p o) (triple-nol delta s p o)))
 		      (stream (cdr os) ref next-ref))))))))
     (cond ((and (var? s) (var? p) (var? o)) (T (compose map-keys index-s) s))
 	  ((and (var? s) (var? p))          (T (index-getter index-o o) s))
@@ -117,7 +117,7 @@
              (let ((v ((index-getter index-spo (index-key s p o)))))
                (cond ((eq? v ref) (later (singleton v)))
                      (v (disj (== #t #t) (later (singleton v))))
-                     (else (disj (== minus '-) (later (singleton v)))))))))))
+                     (else (disj (== delta '-) (later (singleton v)))))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Tests
@@ -127,11 +127,11 @@
 	       (<Q> <R> <O>)))
 
 (define r (run* (q)
-           (fresh (o minus) 
-             (== q `(,minus ,o))
-             (conj+ (triple-nol '<Q> '<R> o minus)
-                    (triple-nol '<S> '<P> o minus)
-                    (triple-nol '<U> '<V> o minus)))))
+           (fresh (o delta) 
+             (== q `(,delta ,o))
+             (triple-nol delta '<Q> '<R> o)
+             (triple-nol delta '<S> '<P> o)
+             (triple-nol delta '<U> '<V> o))))
 
 (print r)
 
