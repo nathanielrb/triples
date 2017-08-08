@@ -1,5 +1,4 @@
-(use s-sparql s-sparql-parser
-     srfi-1 persistent-hash-map matchable)
+(use srfi-1 persistent-hash-map matchable)
 
 (define (assp pred alist)
   (find (lambda (pair) (pred (car pair))) alist))
