@@ -20,12 +20,11 @@
 ;;
 ;; basic structure, []'s are persistent hash maps and <>'s are records
 ;; <database
-;;   :time = (t0 t1 t2 ...)
-;;   :indexes = [ t0 => <index :s  [<S> => (<P1> <P2> ...)  ]
-;;                             :sp [(<S> <P1>) => (O11 O12 ...)  ]
+;;   -time: (t0 t1 t2 ...)
+;;   -indexes: [ t0 => <index -s  [<S> => (<P1> <P2> ...)  ]
+;;                            -sp [(<S> <P1>) => (O11 O12 ...)  ]
 ;;                             ...>
-;;                t1 => ... ] 
-;; >
+;;                t1 => ... ] >
 (define-record db time indexes)
 
 (define-record index s sp p po o os spo)
