@@ -3,8 +3,11 @@
 (define (assp pred alist)
   (find (lambda (pair) (pred (car pair))) alist))
 
-(include "fmicroKanren/fmicroKanren.scm")
-(include "fmicroKanren/miniKanren-wrappers.scm")
+;; (include "fmicroKanren/fmicroKanren.scm")
+;; (include "fmicroKanren/miniKanren-wrappers.scm")
+
+(include "ftmicroKanren/ftmicroKanren.scm")
+(include "ftmicroKanren/miniKanren-wrappers.scm")
 
 (define-syntax project
   (syntax-rules ()
@@ -96,7 +99,7 @@
 	     (let ((vals (index)))
 	       (let stream ((os vals) (ref '()) (next-ref vals))
 		 (if (equal? os ref)
-		     (later
+		     (next
 		      (let ((vals (index)))
                         (stream vals next-ref vals)))
 		     (disj
@@ -113,9 +116,9 @@
 	  (else
            (let singleton ((ref #f))
              (let ((v ((index-getter index-spo (index-key s p o)))))
-               (cond ((eq? v ref) (later (singleton v)))
-                     (v (disj (== #t #t) (later (singleton v))))
-                     (else (disj (== delta '-) (later (singleton v)))))))))))
+               (cond ((eq? v ref) (next (singleton v)))
+                     (v (disj (== #t #t) (next (singleton v))))
+                     (else (disj (== delta '-) (next (singleton v)))))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Tests
@@ -135,7 +138,7 @@
 
 (delete-triples '((<S> <P> <O>)))
 
-(print (future r))
+(print (advance r))
 
 (add-triples '((<S> <P> <O3>)
                (<S> <P> <O>)
@@ -145,4 +148,4 @@
 	       (<U> <V> <M>)
 	       (<Q> <R> <M>)))
 
-(print (future (future r)))
+(print (advance (advance r)))

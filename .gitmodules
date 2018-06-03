@@ -1,3 +1,6 @@
 [submodule "fmicroKanren"]
 	path = fmicroKanren
 	url = https://github.com/nathanielrb/fmicroKanren.git
+[submodule "ftmicroKanren"]
+	path = ftmicroKanren
+	url = git@github.com:nathanielrb/ftmicroKanren.git
