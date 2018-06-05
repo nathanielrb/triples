@@ -3,9 +3,6 @@
 (define (assp pred alist)
   (find (lambda (pair) (pred (car pair))) alist))
 
-;; (include "fmicroKanren/fmicroKanren.scm")
-;; (include "fmicroKanren/miniKanren-wrappers.scm")
-
 (include "ftmicroKanren/ftmicroKanren.scm")
 (include "ftmicroKanren/miniKanren-wrappers.scm")
 
