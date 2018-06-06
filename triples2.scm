@@ -13,68 +13,68 @@
        (let ((x (walk x (car s/c))) ...)
 	 (g s/c))))))
 
-(define-syntax later
+(define-syntax eventually
   (syntax-rules ()
     ((_ g) (let rec () (disj g (next (rec)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Database
-(define-record incrementals s sp p po o os spo)
+(define-record db s sp p po o os spo)
+
+(define-record incrementals map list)
 
 (define (empty-incrementals)
-  (apply make-incrementals
-         (make-list 7 (persistent-map))))
+  (make-incrementals (persistent-map) '()))
 
-(define-record incremental map list)
+(define (empty-db)
+  (apply make-db
+	 (make-list 7 (persistent-map))))
 
-(define (empty-table)
-  (make-incremental (persistent-map) '()))
+(define (update-incrementals table key val)
+  (let ((incrementals (map-ref table key (empty-incrementals))))
+    (map-add table key
+	     (if (map-ref (incrementals-map incrementals) val)
+		 incrementals
+		 (make-incrementals
+		  (map-add (incrementals-map incrementals) val #t)
+		  (cons val (incrementals-list incrementals)))))))
 
-(define (update-incrementals incrementals key)
-  (let ((incrementals (or incrementals (empty-table))))
-    (if (map-ref (incremental-map incrementals) key)
-	incrementals
-	(make-incremental 
-	 (map-add (incremental-map incrementals) key #t)
-	 (cons key (incremental-list incrementals))))))
+(define (update-triple table triple val)
+  (map-add table triple val))
 
-(define *DB* (list (empty-incrementals)))
+(define latest-db (make-parameter (empty-db)))
 
-(define (latest-db) (car *DB*))
-
-(define (latest-incrementals #!optional table key)
-  (if table
-      (incremental-list
-       (map-ref (table (latest-db)) key (empty-table)))
-      (map-keys (incrementals-s (latest-db)))))
+(define (latest-incrementals accessor key)
+  (incrementals-list
+   (map-ref (accessor (latest-db)) key (empty-incrementals))))
 
 (define (latest-triple s p o)
-  (map-ref (incrementals-spo (latest-db))
+  (map-ref (db-spo (latest-db))
 	   (list s p o)))
 
 (define (update-triples DB triples val)
-  (let ((DBS (car DB)))
-    (let loop ((triples triples)
-               (i/s (incrementals-s DBS))
-               (i/sp (incrementals-sp DBS))
-               (i/p (incrementals-p DBS))
-               (i/po (incrementals-po DBS))
-               (i/o (incrementals-o DBS))
-               (i/os (incrementals-os DBS))
-               (i/spo (incrementals-spo DBS)))
-      (if (null? triples)
-	  (cons (make-incrementals i/s i/sp i/p i/po i/o i/os i/spo)
-		DB)
-          (match (car triples)
-            ((s p o)
-             (loop (cdr triples)
-                   (map-update-in i/s `(,s) update-incrementals p)
-                   (map-update-in i/sp `((,s ,p)) update-incrementals o)
-                   (map-update-in i/p `((,p)) update-incrementals  o)
-                   (map-update-in i/po `((,p ,o)) update-incrementals s)
-                   (map-update-in i/o `((,o)) update-incrementals s)
-                   (map-update-in i/os `((,o ,s)) update-incrementals p)
-                   (map-add i/spo (list s p o) val))))))))
+  (let loop ((triples triples)
+	     (i/s (db-s DB))
+	     (i/sp (db-sp DB))
+	     (i/p (db-p DB))
+	     (i/po (db-po DB))
+	     (i/o (db-o DB))
+	     (i/os (db-os DB))
+	     (i/spo (db-spo DB)))
+    (if (null? triples)
+	(make-db i/s i/sp i/p i/po i/o i/os i/spo)
+	(match (car triples)
+	  ((s p o)
+	   (loop (cdr triples)
+		 (update-incrementals
+		  (update-incrementals i/s #f s) 
+		  s p)
+		 (update-incrementals i/sp (list s p) o)
+		 (update-incrementals i/p p o)
+		 (update-incrementals i/po (list p o) s)
+		 (update-incrementals i/o o s)
+		 (update-incrementals i/os (list o s) p)
+		 (update-triple i/spo (list s p o) val)))))))
 
 (define (add-triples DB triples) (update-triples DB triples #t))
 
@@ -89,41 +89,45 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Goal Constructors
 (define (tripleo s p o)
-  (let ((mkstrm (lambda (var get-indexes)
-		  (let stream ((indexes (get-indexes)))
+  (let ((mkstrm (lambda (var accessor key)
+		  (let ((get-incrementals (lambda ()
+					    (latest-incrementals accessor key))))
+		    (let stream ((indexes (get-incrementals)))
 		      (if (null? indexes) (lambda (s/c) mzero)
 			  (disj
 			   (conj (== var (car indexes))
 				 (project (s p o) (tripleo s p o)))
-			   (stream (cdr indexes))))))))
-    (cond ((and (var? s) (var? p) (var? o)) (mkstrm s (lambda () (latest-incrementals))))
-	  ((and (var? s) (var? p))          (mkstrm s (lambda () (latest-incrementals incrementals-o o))))
-	  ((and (var? s) (var? o))          (mkstrm o (lambda () (latest-incrementals incrementals-p p))))
-	  ((and (var? p) (var? o))          (mkstrm p (lambda () (latest-incrementals incrementals-s s))))
-	  ((var? s)                         (mkstrm s (lambda () (latest-incrementals incrementals-po (list p o)))))
-	  ((var? p)                         (mkstrm p (lambda () (latest-incrementals incrementals-os (list o s)))))
-	  ((var? o)                         (mkstrm o (lambda () (latest-incrementals incrementals-sp (list s p)))))
+			   (stream (cdr indexes)))))))))
+    (cond ((and (var? s) (var? p) (var? o)) (mkstrm s db-s #f))
+	  ((and (var? s) (var? p))          (mkstrm s db-o o))
+	  ((and (var? s) (var? o))          (mkstrm o db-p p))
+	  ((and (var? p) (var? o))          (mkstrm p db-s s))
+	  ((var? s)                         (mkstrm s db-po (list p o)))
+	  ((var? p)                         (mkstrm p db-os (list o s)))
+	  ((var? o)                         (mkstrm o db-sp (list s p)))
 	  (else (== #t (latest-triple s p o))))))
 
 (define (triple-nolo delta s p o)
-  (let ((mkstrm (lambda (var get-indexes)
-		  (let ((indexes (get-indexes)))
+  (let ((mkstrm (lambda (var accessor key)
+		  (let* ((get-incrementals (lambda ()
+					    (latest-incrementals accessor key)))
+			(indexes (get-incrementals)))
 		    (let stream ((indexes indexes) (ref '()) (next-ref indexes))
 		      (if (equal? indexes ref)
 			  (next
-			   (let ((vals (get-indexes)))
+			   (let ((vals (get-incrementals)))
 			     (stream vals next-ref vals)))
 			  (disj
 			   (conj (== var (car indexes))
 				 (project (delta s p o) (triple-nolo delta s p o)))
 			   (stream (cdr indexes) ref next-ref))))))))
-    (cond ((and (var? s) (var? p) (var? o)) (mkstrm s (lambda () (latest-incrementals))))
-	  ((and (var? s) (var? p))          (mkstrm s (lambda () (latest-incrementals incrementals-o o))))
-	  ((and (var? s) (var? o))          (mkstrm o (lambda () (latest-incrementals incrementals-p p))))
-	  ((and (var? p) (var? o))          (mkstrm p (lambda () (latest-incrementals incrementals-s s))))
-	  ((var? s)                         (mkstrm s (lambda () (latest-incrementals incrementals-po (list p o)))))
-	  ((var? p)                         (mkstrm p (lambda () (latest-incrementals incrementals-os (list o s)))))
-	  ((var? o)                         (mkstrm o (lambda () (latest-incrementals incrementals-sp (list s p)))))
+    (cond ((and (var? s) (var? p) (var? o)) (mkstrm s db-s #f))
+	  ((and (var? s) (var? p))          (mkstrm s db-o o))
+	  ((and (var? s) (var? o))          (mkstrm o  db-p p))
+	  ((and (var? p) (var? o))          (mkstrm p db-s s))
+	  ((var? s)                         (mkstrm s db-po (list p o)))
+	  ((var? p)                         (mkstrm p db-os (list o s)))
+	  ((var? o)                         (mkstrm o db-sp (list s p)))
 	  (else
            (let leaf ((ref #f))
              (let ((v (latest-triple s p o)))
@@ -134,72 +138,88 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Tests
 ;; (define DB (empty-db))
+(define db0 (empty-db))
 
-
-(define r (run* (q)
-           (fresh (o delta d1 d2 d3) 
-             (== q `(,delta  ,o))
-	     (== delta `(,d1 ,d2 ,d3))
-             (triple-nolo  d1 '<Q> '<R> o)
-             (triple-nolo  d2  '<S> '<P> o)
-             (triple-nolo  d3 '<U> '<V> o))))
+(define r 
+  (parameterize ((latest-db db0))
+    (run* (q)
+	  (fresh (o delta d1 d2 d3) 
+		 (== q `(,delta  ,o))
+		 (== delta `(,d1 ,d2 ,d3))
+		 (triple-nolo  d1 '<Q> '<R> o)
+		 (triple-nolo  d2  '<S> '<P> o)
+		 (triple-nolo  d3 '<U> '<V> o)))))
 
 
 (print r)
 
 
-(set! *DB*
-   (add-triples *DB*  '((<S> <P> <O>)
-		   (<U> <V> <O>)
-		   (<S> <P> <O2>)
-		   (<Q> <R> <O>)
-		   (<A> <B> <C>))))
+(define db1
+  (add-triples db0  '((<S> <P> <O>)
+		      (<U> <V> <O>)
+		      (<S> <P> <O2>)
+		      (<Q> <R> <O>)
+		      (<A> <B> <C>))))
 
  
-(print (advance r))
+(parameterize ((latest-db db1))
+  (print (advance r)))
 
-;; (define DB3
-(set! *DB* (delete-triples *DB* '((<S> <P> <O>))))
+(define db2 (delete-triples db1 '((<S> <P> <O>))))
 
-(print (advance (advance r)))
+(parameterize ((latest-db db2))
+  (print (advance (advance r))))
 
-;; (define DB4
-(set! *DB*  (add-triples *DB* '((<S> <P> <O3>)
-				(<S> <P> <O>)
-				(<Q> <R> <O3>)
-				(<U> <V> <O3>)
-				(<S> <P> <M>)
-				(<U> <V> <M>)
-				(<Q> <R> <M>))))
+(define db3
+  (add-triples db2 '((<S> <P> <O3>)
+		     (<S> <P> <O>)
+		     (<Q> <R> <O3>)
+		     (<U> <V> <O3>)
+		     (<S> <P> <M>)
+		     (<U> <V> <M>)
+		     (<Q> <R> <M>))))
 
-(print (advance (advance (advance r))))
+(parameterize ((latest-db db3))
+  (print (advance (advance (advance r)))))
 
 ;;;
 
-;; (print "***")
-;; (define r3 (run* (o)
-;;              (tripleo '<Q> '<R> o)
-;;              (tripleo  '<S> '<P> o)
-;;              (tripleo '<U> '<V> o)))
+(print "***")
+(parameterize ((latest-db db1))
+  (define r3 (run* (q)
+		   (triple-nolo '+ '<Q> '<R> q)
+		   (triple-nolo '+ '<S> '<P> q)
+		   (triple-nolo '+ '<U> '<V> q)))
+  (print r3)
+  (print (advance r3)))
 
-;; (print r3)
+;;;;
+;; Problem
+;; with triple-nolo, results are multiplied!
+
+(define dba
+  (add-triples db0 '((<A> <B> <C>))))
+
+(parameterize ((latest-db dba))
+  (define r2 (run* (o)
+		   (eventually (tripleo  '<X> '<Y> o))
+		   (tripleo '<A> '<B> o)))
+		   
+  (print "r2: " r2)
+
+  (define dbb
+    (add-triples dba '((<X> <Y> <C>))))
+
+  (parameterize ((latest-db dbb))
+    (print "r2: " (advance r2))
+    (print "r2: " (advance (advance (advance r2))))))
 
 
-
-
-;; ;;;
-
-;; (set! *DB*
-;;    (add-triples *DB* '((<A> <B> <C>))))
-
-;; (define r2 (run* (o)
-;; 		 (tripleo '<A> '<B> o)
-;; 		 (later (tripleo  '<X> '<Y> o))))
-
-;; (print "r2: " r2)
-
-;; (set! *DB*
-;;   (add-triples *DB* '((<X> <Y> <C>))))
-
-;; (print "r2: " (advance r2))
-
+(define *db*
+(let loop ((i 0) (db (empty-db)) (o (gensym)))
+  (if (= i 10000) db
+      (let ((s (gensym)))
+	(loop (+ i 1)
+	      (add-triples db `((,s <P> ,o)))
+	      s))))
+)
